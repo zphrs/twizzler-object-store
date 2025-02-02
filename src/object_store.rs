@@ -1,15 +1,14 @@
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    collections::HashSet,
-    io::Error,
-    pin::Pin,
-    rc::Rc,
-    sync::{Arc, LazyLock, Mutex},
+use crate::{
+    fs::{Disk, FileSystem, PAGE_SIZE},
+    wrapped_extent::WrappedExtent,
 };
-
 use chacha20::{
     cipher::{KeyIvInit, StreamCipher, StreamCipherSeek},
     ChaCha20,
+};
+use fatfs::{
+    DefaultTimeProvider, Dir, IoBase, LossyOemCpConverter, NullTimeProvider, Read as _,
+    ReadWriteProxy, Seek, SeekFrom, Write as _,
 };
 use obliviate_core::{
     crypter::{aes::Aes256Ctr, ivs::SequentialIvg},
@@ -20,25 +19,35 @@ use obliviate_core::{
     wal::SecureWAL,
 };
 use rand::rngs::OsRng;
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::HashSet,
+    io::Error,
+    pin::Pin,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
+type EncodedObjectId = String;
+
+fn encode_obj_id(obj_id: u128) -> EncodedObjectId {
+    format!("{:0>32x}", obj_id)
+}
 pub type MyKhf = Khf<OsRng, SequentialIvg, Aes256Ctr, Sha3_256, SHA3_256_MD_SIZE>;
-struct ObjectStore<D: Disk> {
+pub struct ObjectStore<D: Disk> {
     fs: Pin<Box<FileSystem<D>>>,
     kms: Mutex<Kms<D>>,
 }
 
+type MyWal<D> = SecureWAL<
+    D,
+    <MyKhf as KeyManagementScheme>::LogEntry,
+    SequentialIvg,
+    Aes256Ctr,
+    SHA3_256_MD_SIZE,
+>;
 struct Kms<D: Disk> {
-    wal: Rc<
-        RefCell<
-            SecureWAL<
-                D,
-                <MyKhf as KeyManagementScheme>::LogEntry,
-                SequentialIvg,
-                Aes256Ctr,
-                SHA3_256_MD_SIZE,
-            >,
-        >,
-    >,
+    wal: Rc<RefCell<MyWal<D>>>,
     khf: Rc<RefCell<MyKhf>>,
 }
 
@@ -77,10 +86,6 @@ where
             khf: Rc::new(RefCell::new(Self::open_khf(fs.clone(), root_key))),
             wal: Rc::new(RefCell::new(Self::open_wal(fs, root_key))),
         }
-    }
-
-    pub fn khf(&self) -> Ref<MyKhf> {
-        self.khf.borrow()
     }
 
     pub fn khf_mut(&self) -> RefMut<MyKhf> {
@@ -149,7 +154,6 @@ where
     /// When there is a Disk error or when a lock is not
     /// able to be claimed
     pub fn reformat(&mut self, mut disk: D, root_key: [u8; 32]) {
-        let _unused = LOCK.lock();
         FileSystem::format(&mut disk);
         self.fs = Box::pin(FileSystem::open_fs(disk));
         self.kms = Mutex::new(Kms::open(self.fs.fs_as_owned(), root_key));
@@ -225,7 +229,7 @@ where
         }
     }
 
-    pub fn kms_lock(&self) -> std::sync::MutexGuard<'_, Kms<D>> {
+    fn kms_lock(&self) -> std::sync::MutexGuard<'_, Kms<D>> {
         self.kms.lock().unwrap()
     }
     /// unlinks (aka deletes) the object at `obj_id`.
@@ -233,7 +237,6 @@ where
     /// To do secure deletion on deletes you must call an epoch
     /// before saving.
     pub fn unlink_object(&mut self, obj_id: u128) -> Result<(), Error> {
-        let _unused = LOCK.lock().unwrap();
         let b64 = encode_obj_id(obj_id);
         // let (khf, wal) = (kms.khf_mut(), kms.wal_mut());
         // khf.delete(&wal, hash_obj_id(obj_id))
@@ -288,22 +291,7 @@ where
         get_symmetric_cipher_from_key(disk_offset, key)
     }
 
-    fn get_symmetric_cipher_from_key(disk_offset: u64, key: [u8; 32]) -> Result<ChaCha20, Error> {
-        let chunk_id = disk_offset / (PAGE_SIZE as u64);
-        let offset = disk_offset % (PAGE_SIZE as u64);
-        let bytes = chunk_id.to_le_bytes();
-        let nonce: [u8; 12] = [
-            0, 0, 0, 0, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-            bytes[7],
-        ];
-
-        let mut cipher = ChaCha20::new(&key.into(), &nonce.into());
-        cipher.seek(offset);
-        Ok(cipher)
-    }
-
     pub fn read_exact(&mut self, obj_id: u128, buf: &mut [u8], off: u64) -> Result<(), Error> {
-        let _unused = LOCK.lock().unwrap();
         let b64 = encode_obj_id(obj_id);
         let mut fs = self.fs().lock().unwrap();
         let subdir = get_dir_path(&mut fs, &b64)?;
@@ -318,7 +306,7 @@ where
                 let out = disk.read(buffer)?;
                 let mut cipher = self
                     .get_symmetric_cipher(disk_offset)
-                    .map_err(|e| Error::other(e))?;
+                    .map_err(Error::other)?;
                 cipher.apply_keystream(buffer);
                 Ok(out)
             },
@@ -329,7 +317,6 @@ where
     }
 
     pub fn write_all(&self, obj_id: u128, buf: &[u8], off: u64) -> Result<(), Error> {
-        let _unused = LOCK.lock().unwrap();
         let b64 = encode_obj_id(obj_id);
         // call to get_khf_locks to make sure that khf is already initialized for
         // the later "get_symmetric_cipher" call
@@ -349,7 +336,7 @@ where
                 let mut encrypted = vec![0u8; buffer.len()];
                 cipher
                     .apply_keystream_b2b(buffer, &mut encrypted)
-                    .map_err(|e| Error::other(e))?;
+                    .map_err(Error::other)?;
                 let out = disk.write(&encrypted)?;
                 Ok(out)
             },
@@ -360,12 +347,11 @@ where
             .map(|v| v.map(WrappedExtent::from))
             .try_collect()?;
         // Should never add extents to a file after writing to a file.
-        assert!(extents_before.difference(&extents_after).next() == None);
+        assert_eq!(extents_before.difference(&extents_after).next(), None);
         Ok(())
     }
 
     pub fn advance_epoch(&mut self, root_key: [u8; 32]) -> Result<(), Error> {
-        let _unused = LOCK.lock().unwrap();
         let kms = self.kms_lock();
         let updated_keys = kms.khf_mut().update(&kms.wal()).map_err(Error::other)?;
         drop(kms);
@@ -377,22 +363,22 @@ where
             disk.seek(SeekFrom::Start(disk_offset))?;
             disk.read_exact(buf.as_mut_slice())?;
             let mut cipher =
-                get_symmetric_cipher_from_key(disk_offset, key).map_err(|e| Error::other(e))?;
+                get_symmetric_cipher_from_key(disk_offset, key).map_err(Error::other)?;
             cipher.apply_keystream(&mut buf);
             disk.seek(SeekFrom::Start(disk_offset))?;
             let mut cipher = self
                 .get_symmetric_cipher(disk_offset)
-                .map_err(|e| Error::other(e))?;
+                .map_err(Error::other)?;
             cipher.apply_keystream(&mut buf);
-            disk.write_all(&mut buf)?;
+            disk.write_all(&buf)?;
         }
         let kms = self.kms_lock();
         let mut khf = kms.khf_mut();
         {
             let fs = self.fs().lock().unwrap();
-            {
-                fs.root_dir().create_dir("tmp/")?
-            };
+
+            fs.root_dir().create_dir("tmp/")?;
+
             khf.persist(root_key, "tmp/khf", &fs)
                 .map_err(Error::other)?;
             // Ideally would be atomic from here...
@@ -436,24 +422,4 @@ fn get_symmetric_cipher_from_key(disk_offset: u64, key: [u8; 32]) -> Result<ChaC
     let mut cipher = ChaCha20::new(&key.into(), &nonce.into());
     cipher.seek(offset);
     Ok(cipher)
-}
-
-/// To avoid dealing with race conditions I lock every external function call
-/// at the entrance of the function.
-static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
-
-use fatfs::{
-    DefaultTimeProvider, Dir, IoBase, LossyOemCpConverter, NullTimeProvider, Read as _,
-    ReadWriteProxy, Seek, SeekFrom, Write as _,
-};
-
-use crate::{
-    fs::{Disk, FileSystem, PAGE_SIZE},
-    wrapped_extent::WrappedExtent,
-};
-
-type EncodedObjectId = String;
-
-fn encode_obj_id(obj_id: u128) -> EncodedObjectId {
-    format!("{:0>32x}", obj_id)
 }

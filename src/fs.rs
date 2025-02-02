@@ -1,7 +1,4 @@
-use std::{
-    ops::Deref,
-    sync::{Arc, LazyLock, Mutex, MutexGuard},
-};
+use std::sync::{Arc, Mutex};
 
 use fatfs::{FatType, FormatVolumeOptions, IoBase, LossyOemCpConverter, NullTimeProvider};
 
@@ -42,12 +39,6 @@ impl<D: Disk> FileSystem<D> {
             fs: Arc::new(Mutex::new(fs)),
             disk,
         }
-    }
-
-    pub(crate) fn fs_mut(
-        &mut self,
-    ) -> Arc<Mutex<fatfs::FileSystem<D, NullTimeProvider, LossyOemCpConverter>>> {
-        self.fs.clone()
     }
 
     pub fn fs(&self) -> &Mutex<fatfs::FileSystem<D, NullTimeProvider, LossyOemCpConverter>> {

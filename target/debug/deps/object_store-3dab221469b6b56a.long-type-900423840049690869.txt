@@ -1,1 +1,0 @@
-ReadWriteProxy<'_, '_, D, NullTimeProvider, LossyOemCpConverter, {closure@src/object_store.rs:335:13: 335:15}, {closure@src/object_store.rs:336:13: 336:93}>

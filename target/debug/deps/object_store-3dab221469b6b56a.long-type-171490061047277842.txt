@@ -1,1 +1,0 @@
-Result<MutexGuard<'_, fatfs::FileSystem<D>>, PoisonError<MutexGuard<'_, fatfs::FileSystem<D>>>>

@@ -1,0 +1,10 @@
+/Users/zphrs/Documents/twizzler/twizzler-object-store/target/debug/deps/libvolatile-efa996a666b3fdd3.rmeta: /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/lib.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/access.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/mod.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/macros.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/operations.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ref.rs
+
+/Users/zphrs/Documents/twizzler/twizzler-object-store/target/debug/deps/volatile-efa996a666b3fdd3.d: /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/lib.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/access.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/mod.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/macros.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/operations.rs /Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ref.rs
+
+/Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/lib.rs:
+/Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/access.rs:
+/Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/mod.rs:
+/Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/macros.rs:
+/Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ptr/operations.rs:
+/Users/zphrs/.cargo/registry/src/index.crates.io-6f17d22bba15001f/volatile-0.5.4/src/volatile_ref.rs:

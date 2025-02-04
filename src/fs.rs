@@ -1,8 +1,12 @@
 use std::sync::{Arc, Mutex};
 
-use fatfs::{FatType, FormatVolumeOptions, IoBase, LossyOemCpConverter, NullTimeProvider};
+use fatfs::{
+    FatType, FormatVolumeOptions, IoBase, LossyOemCpConverter, NullTimeProvider, ReadWriteSeek,
+};
 
 pub trait Disk: fatfs::ReadWriteSeek + IoBase + Clone {}
+
+impl<T> Disk for T where T: ReadWriteSeek + IoBase + Clone {}
 #[derive(Clone)]
 pub(crate) struct FileSystem<D: Disk> {
     disk: D,
@@ -32,6 +36,7 @@ impl<D: Disk> FileSystem<D> {
             };
         }
         drop(fs);
+        disk.seek(fatfs::SeekFrom::Start(0)).unwrap();
         Self::format(&mut disk);
         let fs = fatfs::FileSystem::new(disk.clone(), fs_options)
             .expect("disk should be formatted now so no more errors.");
@@ -39,6 +44,19 @@ impl<D: Disk> FileSystem<D> {
             fs: Arc::new(Mutex::new(fs)),
             disk,
         }
+    }
+
+    pub fn reopen(&mut self) {
+        let fs_options = fatfs::FsOptions::new().update_accessed_date(false);
+        self.disk.seek(fatfs::SeekFrom::Start(0)).unwrap();
+        let fs = fatfs::FileSystem::new(self.disk.clone(), fs_options);
+        if let Ok(fs) = fs {
+            *self.fs.lock().unwrap() = fs;
+        }
+        self.disk.seek(fatfs::SeekFrom::Start(0)).unwrap();
+        let fs = fatfs::FileSystem::new(self.disk.clone(), fs_options)
+            .expect("disk should be formatted now so no more errors.");
+        *self.fs.lock().unwrap() = fs;
     }
 
     pub fn fs(&self) -> &Mutex<fatfs::FileSystem<D, NullTimeProvider, LossyOemCpConverter>> {

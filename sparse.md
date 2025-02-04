@@ -5,7 +5,7 @@ Directory format within fat32. Values within `{}` are wildcards.
 ```shell
 └── ids
     └── {first_obj_id_char:0-f}
-        └── {first_obj_id_char+rest_of_obj_id}
+        └── {full_obj_id}
             ├── .metadata
             └── chunks
                 └── {chunk_id}
